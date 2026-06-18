@@ -1,6 +1,6 @@
 use core::marker::PhantomData;
 
-#[cfg(adc_l0)]
+#[cfg(any(adc_l0, adc_wb1))]
 use stm32_metapac::adc::vals::Ckmode;
 use stm32_metapac::adc::vals::Scandir;
 
@@ -41,11 +41,22 @@ impl<T: DefaultInstance> interrupt::typelevel::Handler<T::Interrupt> for Interru
     }
 }
 
-#[cfg(not(adc_l0))]
+#[cfg(adc_wb1)]
+impl super::ConverterFor<super::Vbat> for crate::peripherals::ADC1 {
+    const CHANNEL: u8 = 14;
+}
+
+#[cfg(not(any(adc_l0, adc_wb1)))]
 impl super::ConverterFor<super::Vbat> for crate::peripherals::ADC1 {
     const CHANNEL: u8 = 18;
 }
 
+#[cfg(adc_wb1)]
+impl super::ConverterFor<super::VrefInt> for crate::peripherals::ADC1 {
+    const CHANNEL: u8 = 13;
+}
+
+#[cfg(not(adc_wb1))]
 impl super::ConverterFor<super::VrefInt> for crate::peripherals::ADC1 {
     const CHANNEL: u8 = 17;
 }
@@ -55,7 +66,12 @@ impl super::ConverterFor<super::Temperature> for crate::peripherals::ADC1 {
     const CHANNEL: u8 = 18;
 }
 
-#[cfg(not(adc_l0))]
+#[cfg(adc_wb1)]
+impl super::ConverterFor<super::Temperature> for crate::peripherals::ADC1 {
+    const CHANNEL: u8 = 12;
+}
+
+#[cfg(not(any(adc_l0, adc_wb1)))]
 impl super::ConverterFor<super::Temperature> for crate::peripherals::ADC1 {
     const CHANNEL: u8 = 16;
 }
@@ -66,7 +82,7 @@ impl AdcRegs for crate::pac::adc::Adc {
     }
 
     fn enable(&self) {
-        #[cfg(adc_l0)]
+        #[cfg(any(adc_l0, adc_wb1))]
         if self.cfgr1().read().autoff() {
             // In AUTOFF mode the ADC wakes automatically when conversion starts,
             // so waiting for ADRDY here can stall instead of helping.
@@ -213,27 +229,27 @@ impl<'d, T: DefaultInstance> Adc<'d, T> {
         // tstab = 14 * 1/fadc
         block_for_us(1);
 
-        // set default PCKL/2 on L0s because HSI is disabled in the default clock config
-        #[cfg(adc_l0)]
+        // set default PCKL/2 on L0s and WB1s because HSI is disabled in the default clock config
+        #[cfg(any(adc_l0, adc_wb1))]
         T::regs().cfgr2().modify(|reg| reg.set_ckmode(Ckmode::PclkDiv2));
 
         // A.7.1 ADC calibration code example
         T::regs().cfgr1().modify(|reg| reg.set_dmaen(false));
 
-        #[cfg(adc_l0)]
+        #[cfg(any(adc_l0, adc_wb1))]
         let auto_off = T::regs().cfgr1().read().autoff();
-        #[cfg(adc_l0)]
+        #[cfg(any(adc_l0, adc_wb1))]
         T::regs().cfgr1().modify(|reg| reg.set_autoff(false));
 
         T::regs().cr().modify(|reg| reg.set_adcal(true));
 
-        #[cfg(adc_l0)]
+        #[cfg(any(adc_l0, adc_wb1))]
         while !T::regs().isr().read().eocal() {}
 
-        #[cfg(not(adc_l0))]
+        #[cfg(not(any(adc_l0, adc_wb1)))]
         while T::regs().cr().read().adcal() {}
 
-        #[cfg(adc_l0)]
+        #[cfg(any(adc_l0, adc_wb1))]
         T::regs().cfgr1().modify(|reg| reg.set_autoff(auto_off));
 
         let s = Self { adc };
@@ -277,12 +293,12 @@ impl<'d, T: DefaultInstance> Adc<'d, T> {
         Temperature
     }
 
-    #[cfg(adc_l0)]
+    #[cfg(any(adc_l0, adc_wb1))]
     pub fn enable_auto_off(&mut self) {
         T::regs().cfgr1().modify(|reg| reg.set_autoff(true));
     }
 
-    #[cfg(adc_l0)]
+    #[cfg(any(adc_l0, adc_wb1))]
     pub fn disable_auto_off(&mut self) {
         T::regs().cfgr1().modify(|reg| reg.set_autoff(false));
     }
@@ -291,7 +307,7 @@ impl<'d, T: DefaultInstance> Adc<'d, T> {
         T::regs().cfgr1().modify(|reg| reg.set_res(resolution.into()));
     }
 
-    #[cfg(adc_l0)]
+    #[cfg(any(adc_l0, adc_wb1))]
     pub fn set_ckmode(&mut self, ckmode: Ckmode) {
         // set ADC clock mode
         T::regs().cfgr2().modify(|reg| reg.set_ckmode(ckmode));
